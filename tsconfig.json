@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "rewriteRelativeImportExtensions": true,
     "paths": {
       "@modelcontextprotocol/server": ["./node_modules/@modelcontextprotocol/server/src/index.ts"],
       "@modelcontextprotocol/server/_shims": [

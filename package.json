@@ -4,12 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "bin": {
-    "weather": "./build/index.js"
+    "markdown-store-mcp": "./build/index.js"
   },
   "scripts": {
     "build": "tsc",
     "prettier:format": "prettier --write .",
     "prettier:check": "prettier --check .",
+    "test": "node --import tsx --test tests",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^24.3.0",
     "prettier": "^3.8.2",
+    "tsx": "^4.20.5",
     "typescript": "^6.0.2"
   }
 }
