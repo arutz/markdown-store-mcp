@@ -19,6 +19,6 @@ export function parseFrontmatter(source: string, canonicalPath: string): Canonic
   return {
     canonicalPath,
     metadata: docMetadataSchema.parse(parsed.data),
-    content: parsed.content,
+    content: parsed.content.trimEnd(),
   };
 }
