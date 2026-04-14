@@ -1,0 +1,24 @@
+{
+  "name": "markdown-store-mcp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "weather": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prettier:format": "prettier --write .",
+    "prettier:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "prettier": "^3.8.2",
+    "typescript": "^6.0.2"
+  }
+}
