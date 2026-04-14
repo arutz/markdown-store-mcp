@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 import type { DocumentService } from "./services/document-service.ts";
 import { registerCreateDocTool } from "./tools/create-doc.ts";
+import { registerGetDocTool } from "./tools/get-doc.ts";
 
 export function buildServer(service: DocumentService): McpServer {
   const server = new McpServer({
@@ -10,6 +11,7 @@ export function buildServer(service: DocumentService): McpServer {
   });
 
   registerCreateDocTool(server, service);
+  registerGetDocTool(server, service);
 
   return server;
 }
