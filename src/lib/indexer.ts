@@ -32,6 +32,7 @@ export class MarkdownDbIndexer implements DocumentIndexer {
   private async createClient(): Promise<MarkdownDB> {
     const dbFile = join(this.config.repoRoot, this.config.indexDbPath);
     await mkdir(dirname(dbFile), { recursive: true });
+    await assertSqliteBindingAvailable();
 
     const client = new MarkdownDB({
       client: "sqlite3",
@@ -42,5 +43,15 @@ export class MarkdownDbIndexer implements DocumentIndexer {
     });
 
     return client.init();
+  }
+}
+
+async function assertSqliteBindingAvailable(): Promise<void> {
+  try {
+    await import("sqlite3");
+  } catch {
+    throw new Error(
+      "sqlite3 native binding is unavailable. Run npm install in the markdown-store worktree."
+    );
   }
 }

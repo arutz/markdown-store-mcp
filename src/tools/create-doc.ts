@@ -20,28 +20,47 @@ export function registerCreateDocTool(server: McpServer, service: DocumentServic
       inputSchema: createDocToolSchema,
     },
     async (input) => {
-      const parsed = createDocToolSchema.parse(input);
-      const created = await service.createDoc({
-        ...parsed,
-        source: "canonical",
-      });
+      try {
+        const parsed = createDocToolSchema.parse(input);
+        const created = await service.createDoc({
+          ...parsed,
+          source: "canonical",
+        });
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              {
-                id: created.metadata.id,
-                canonical_path: created.canonicalPath,
-                metadata: created.metadata,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  id: created.metadata.id,
+                  canonical_path: created.canonicalPath,
+                  metadata: created.metadata,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to create document";
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  error: message,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
     }
   );
 }

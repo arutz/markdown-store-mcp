@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
 import { buildCanonicalPath, type CanonicalDocument } from "../domain/document.ts";
@@ -66,6 +66,22 @@ export class CanonicalDocStore {
     const absolutePath = this.resolveContentPath(canonicalPath);
 
     return this.readStoredDocument(absolutePath);
+  }
+
+  async deleteByPath(relativePath: string): Promise<void> {
+    const canonicalPath = normalizeCanonicalPath(relativePath);
+    const absolutePath = this.resolveContentPath(canonicalPath);
+
+    try {
+      await assertRealPathWithinRepo(this.config.repoRoot, dirname(absolutePath));
+      await rm(absolutePath, { force: true });
+    } catch (error) {
+      if (isFileMissingError(error)) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private async *listMarkdownFiles(directory: string): AsyncGenerator<string> {

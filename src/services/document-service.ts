@@ -19,7 +19,12 @@ export class DocumentService {
     const document = normalizeCreateInput(input, nowIso);
 
     await this.store.write(document);
-    await this.indexer.reindex();
+    try {
+      await this.indexer.reindex();
+    } catch (error) {
+      await this.store.deleteByPath(document.canonicalPath);
+      throw error;
+    }
 
     return document;
   }
