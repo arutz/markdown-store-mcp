@@ -10,6 +10,12 @@
 
 ---
 
+## Scope Guardrails
+
+- Document history behavior is out of scope for this feature cycle.
+- `get_doc_history` is not part of the planned MCP surface.
+- Optional import metadata such as `source_repo`, `source_path`, `source_ref`, `source_commit`, and `imported_at` remains in scope only as lightweight source traceability for imported documents.
+
 ## Delivery Phases
 
 ### Phase 1: MVP
@@ -85,7 +91,7 @@ Required fields for net-new documents:
 - `created_at`
 - `updated_at`
 
-Optional provenance fields are only populated for imported documents.
+Optional import traceability fields are only populated for imported documents.
 
 Inactive documents are represented by adding the `inactive` tag to `tags`. No separate `status` front matter field is introduced in v1.
 
@@ -1090,7 +1096,7 @@ MVP exit criteria:
 - Modify: `src/services/document-service.ts`
 - Modify: `src/server.ts`
 
-- [ ] **Step 1: Write failing tests for import provenance and active-only search**
+- [ ] **Step 1: Write failing tests for import traceability metadata and active-only search**
 
 ```md
 <!-- tests/fixtures/source-doc.md -->
@@ -1119,7 +1125,7 @@ import { makeTempRepo, removeTempRepo } from "./helpers/temp-repo.js";
 
 const sourceDocPath = fileURLToPath(new URL("./fixtures/source-doc.md", import.meta.url));
 
-test("importDoc preserves provenance and searchDocs excludes inactive docs", async () => {
+test("importDoc preserves source traceability metadata and searchDocs excludes inactive docs", async () => {
   const repoRoot = await makeTempRepo();
 
   try {

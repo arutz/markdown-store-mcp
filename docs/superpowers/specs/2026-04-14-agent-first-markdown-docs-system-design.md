@@ -79,9 +79,8 @@ Properties of the canonical repository:
 - all approved documents live in one place
 - documents are stored as ordinary Markdown files
 - front matter provides the minimum required structured metadata
-- Git history in this repository is the authoritative history after import
 
-This design avoids mixing documentation history with the branch history of unrelated product repositories.
+This design avoids mixing canonical documentation storage with the branch history and layout of unrelated product repositories.
 
 ### Index layer
 
@@ -97,7 +96,7 @@ Responsibilities of the index layer:
 Non-responsibilities of the index layer:
 
 - it is not the canonical store
-- it is not the source of document revision history
+- it does not define document history behavior
 - it does not define the public agent contract
 
 ### MCP layer
@@ -142,24 +141,18 @@ The MCP layer must enforce the visibility rule based on that tag and exclude ina
 
 Deleted documents are physically removed from the canonical repository and from the index. This is a destructive action and must be represented by an explicit delete operation.
 
-## Provenance and history model
+## Import provenance metadata
 
-Git history in the canonical documentation repository is the authoritative revision history after a document has been imported or created there.
+Document history behavior is out of scope for this design iteration. The system may still store lightweight source-traceability metadata on imported documents so agents can understand where an imported document came from.
 
-This design assumes:
-
-- canonical history should not live in the original product repository branch
-- a separate dedicated repository is a better fit than a fork for the documentation system
-- imported documents may need provenance metadata to preserve traceability back to the original source
-
-Recommended provenance metadata for imported documents:
+Recommended metadata for imported documents:
 
 - `source_repo`
 - `source_path`
 - `source_ref` or `source_commit`
 - `imported_at`
 
-This gives the system traceability without attempting to merge unrelated Git histories.
+This keeps import traceability lightweight without introducing a history feature or a history-specific MCP contract.
 
 ## Metadata model
 
@@ -292,10 +285,7 @@ The following tools are useful extensions but are not required for the first imp
 
 - `list_docs`
 - `list_related_docs`
-- `get_doc_history`
 - `validate_doc`
-
-`get_doc_history` should be implemented as a Git-backed capability over canonical document paths rather than as a `MarkdownDB` feature.
 
 ## Cross-tool behavior rules
 
@@ -331,7 +321,7 @@ The structure should support:
 - efficient indexing
 - room for future browsing UI generation
 
-Whatever taxonomy is chosen, it should prioritize document purpose over accidental project history.
+Whatever taxonomy is chosen, it should prioritize document purpose over accidental source-repository layout.
 
 ## Validation strategy
 
@@ -358,18 +348,13 @@ The implementation should be validated with the narrowest checks that prove the 
 - verify import does not delete source files
 - verify destructive operations are explicit and limited to canonical documents
 
-### History validation
-
-- verify canonical Git history records document changes after creation or import
-- verify imported documents can retain provenance metadata linking back to their original source
-
 ## Out of scope
 
 The following items are intentionally out of scope for the first implementation:
 
 - automatic deletion of source files after import
 - a human-facing frontend or portal as a required first-phase deliverable
-- a custom revision history system separate from Git
+- document history features, including `get_doc_history`
 - migration of all existing repository documentation into the canonical repository
 - advanced workflow automation beyond the agreed MCP tool set
 
