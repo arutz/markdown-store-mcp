@@ -151,6 +151,7 @@ For v1, every write operation triggers a full rebuild of the `content/` folder i
 ## Task 1: Define Canonical Document Rules
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `tests/document-model.test.ts`
 - Create: `src/domain/document.ts`
@@ -163,11 +164,7 @@ For v1, every write operation triggers a full rebuild of the `content/` folder i
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  buildCanonicalPath,
-  isInactive,
-  normalizeCreateInput,
-} from "../src/domain/document.js";
+import { buildCanonicalPath, isInactive, normalizeCreateInput } from "../src/domain/document.js";
 
 test("normalizeCreateInput derives id, metadata, and canonical path", () => {
   const nowIso = "2026-04-14T18:00:00.000Z";
@@ -179,7 +176,7 @@ test("normalizeCreateInput derives id, metadata, and canonical path", () => {
       content: "# Agent First Markdown Docs",
       tags: ["agents", "architecture"],
     },
-    nowIso,
+    nowIso
   );
 
   assert.equal(normalized.metadata.id, "agent-first-markdown-docs");
@@ -189,7 +186,7 @@ test("normalizeCreateInput derives id, metadata, and canonical path", () => {
   assert.deepEqual(normalized.metadata.tags, ["agents", "architecture"]);
   assert.equal(
     buildCanonicalPath(normalized.metadata),
-    "content/spec/agent-first-markdown-docs.md",
+    "content/spec/agent-first-markdown-docs.md"
   );
   assert.equal(isInactive(normalized.metadata), false);
 });
@@ -338,6 +335,7 @@ git commit -m "feat: define canonical markdown document model"
 ## Task 2: Build Repository-Safe Markdown Persistence
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `tests/helpers/temp-repo.ts`
 - Create: `tests/canonical-doc-store.test.ts`
@@ -388,7 +386,7 @@ test("CanonicalDocStore writes markdown inside the configured repo and reads it 
         content: "# Write Path Safety",
         tags: ["safety"],
       },
-      "2026-04-14T18:05:00.000Z",
+      "2026-04-14T18:05:00.000Z"
     );
 
     await store.write(document);
@@ -413,7 +411,7 @@ test("CanonicalDocStore rejects attempts to escape the repo root", async () => {
 
     await assert.rejects(
       () => store.getByPath("../outside.md"),
-      /outside the canonical repository/i,
+      /outside the canonical repository/i
     );
   } finally {
     await removeTempRepo(repoRoot);
@@ -444,9 +442,7 @@ export interface MarkdownStoreConfig {
   indexDbPath: string;
 }
 
-export function resolveConfig(
-  env: NodeJS.ProcessEnv = process.env,
-): MarkdownStoreConfig {
+export function resolveConfig(env: NodeJS.ProcessEnv = process.env): MarkdownStoreConfig {
   const repoRoot = env.MARKDOWN_STORE_REPO;
 
   if (!repoRoot) {
@@ -495,10 +491,7 @@ export function serializeDocument(document: CanonicalDocument): string {
   return matter.stringify(document.content, document.metadata);
 }
 
-export function parseDocument(
-  rawMarkdown: string,
-  canonicalPath: string,
-): CanonicalDocument {
+export function parseDocument(rawMarkdown: string, canonicalPath: string): CanonicalDocument {
   const parsed = matter(rawMarkdown);
   const metadata = docMetadataSchema.parse(parsed.data as DocMetadata);
 
@@ -541,7 +534,7 @@ export class CanonicalDocStore {
             return walk(next);
           }
           return next.endsWith(".md") ? [next] : [];
-        }),
+        })
       );
 
       return nested.flat();
@@ -549,7 +542,7 @@ export class CanonicalDocStore {
 
     const files = await walk(contentRoot);
     const match = files.find(
-      (filePath) => filePath.endsWith(`/${id}.md`) || filePath.endsWith(`\\${id}.md`),
+      (filePath) => filePath.endsWith(`/${id}.md`) || filePath.endsWith(`\\${id}.md`)
     );
 
     if (!match) {
@@ -598,6 +591,7 @@ git commit -m "feat: persist canonical markdown docs safely"
 ## Task 3: Ship `create_doc`
 
 **Files:**
+
 - Modify: `package.json`
 - Create: `tests/create-doc.test.ts`
 - Create: `src/lib/indexer.ts`
@@ -626,14 +620,11 @@ test("createDoc writes the document and triggers a reindex", async () => {
     const config = resolveConfig({
       MARKDOWN_STORE_REPO: repoRoot,
     });
-    const service = new DocumentService(
-      new CanonicalDocStore(config),
-      {
-        reindex: async () => {
-          reindexCalls.push("reindex");
-        },
+    const service = new DocumentService(new CanonicalDocStore(config), {
+      reindex: async () => {
+        reindexCalls.push("reindex");
       },
-    );
+    });
 
     const created = await service.createDoc(
       {
@@ -642,7 +633,7 @@ test("createDoc writes the document and triggers a reindex", async () => {
         tags: ["mvp"],
         content: "# Create Doc MVP",
       },
-      "2026-04-14T18:10:00.000Z",
+      "2026-04-14T18:10:00.000Z"
     );
 
     assert.equal(created.canonicalPath, "content/spec/create-doc-mvp.md");
@@ -728,10 +719,13 @@ import { CanonicalDocStore } from "../repository/canonical-doc-store.js";
 export class DocumentService {
   constructor(
     private readonly store: CanonicalDocStore,
-    private readonly indexer: DocumentIndexer,
+    private readonly indexer: DocumentIndexer
   ) {}
 
-  async createDoc(input: CreateDocInput, nowIso = new Date().toISOString()): Promise<CanonicalDocument> {
+  async createDoc(
+    input: CreateDocInput,
+    nowIso = new Date().toISOString()
+  ): Promise<CanonicalDocument> {
     const document = normalizeCreateInput(input, nowIso);
     await this.store.write(document);
     await this.indexer.reindex();
@@ -740,7 +734,7 @@ export class DocumentService {
 
   async getDoc(
     identifier: string,
-    options: { includeInactive?: boolean } = {},
+    options: { includeInactive?: boolean } = {}
   ): Promise<CanonicalDocument | null> {
     const document =
       identifier.includes("/") || identifier.endsWith(".md")
@@ -797,12 +791,12 @@ export function registerCreateDocTool(server: McpServer, service: DocumentServic
                 metadata: created.metadata,
               },
               null,
-              2,
+              2
             ),
           },
         ],
       };
-    },
+    }
   );
 }
 ```
@@ -839,10 +833,7 @@ import { DocumentService } from "./services/document-service.js";
 
 async function main() {
   const config = resolveConfig();
-  const service = new DocumentService(
-    new CanonicalDocStore(config),
-    new MarkdownDbIndexer(config),
-  );
+  const service = new DocumentService(new CanonicalDocStore(config), new MarkdownDbIndexer(config));
   const server = buildServer(service);
   const transport = new StdioServerTransport();
 
@@ -878,6 +869,7 @@ git commit -m "feat: add create_doc tool"
 ## Task 4: Ship `get_doc` And Close The MVP
 
 **Files:**
+
 - Create: `tests/get-doc.test.ts`
 - Create: `src/tools/get-doc.ts`
 - Modify: `src/server.ts`
@@ -901,10 +893,9 @@ test("getDoc returns an active document by id and canonical path", async () => {
     const config = resolveConfig({
       MARKDOWN_STORE_REPO: repoRoot,
     });
-    const service = new DocumentService(
-      new CanonicalDocStore(config),
-      { reindex: async () => undefined },
-    );
+    const service = new DocumentService(new CanonicalDocStore(config), {
+      reindex: async () => undefined,
+    });
 
     await service.createDoc(
       {
@@ -913,7 +904,7 @@ test("getDoc returns an active document by id and canonical path", async () => {
         tags: ["mvp"],
         content: "# Get Doc MVP",
       },
-      "2026-04-14T18:15:00.000Z",
+      "2026-04-14T18:15:00.000Z"
     );
 
     const byId = await service.getDoc("get-doc-mvp");
@@ -933,10 +924,9 @@ test("getDoc hides inactive documents unless explicitly requested", async () => 
     const config = resolveConfig({
       MARKDOWN_STORE_REPO: repoRoot,
     });
-    const service = new DocumentService(
-      new CanonicalDocStore(config),
-      { reindex: async () => undefined },
-    );
+    const service = new DocumentService(new CanonicalDocStore(config), {
+      reindex: async () => undefined,
+    });
 
     await service.createDoc(
       {
@@ -945,7 +935,7 @@ test("getDoc hides inactive documents unless explicitly requested", async () => 
         tags: ["inactive"],
         content: "# Hidden Doc",
       },
-      "2026-04-14T18:16:00.000Z",
+      "2026-04-14T18:16:00.000Z"
     );
 
     assert.equal(await service.getDoc("hidden-doc"), null);
@@ -1007,7 +997,7 @@ export function registerGetDocTool(server: McpServer, service: DocumentService):
                   identifier: parsed.identifier,
                 },
                 null,
-                2,
+                2
               ),
             },
           ],
@@ -1026,12 +1016,12 @@ export function registerGetDocTool(server: McpServer, service: DocumentService):
                 content: document.content,
               },
               null,
-              2,
+              2
             ),
           },
         ],
       };
-    },
+    }
   );
 }
 ```
@@ -1086,6 +1076,7 @@ MVP exit criteria:
 ## Task 5: Add `import_doc` And `search_docs`
 
 **Files:**
+
 - Create: `tests/fixtures/source-doc.md`
 - Create: `tests/import-search.test.ts`
 - Modify: `tests/create-doc.test.ts`
@@ -1099,12 +1090,14 @@ MVP exit criteria:
 - [ ] **Step 1: Write failing tests for import traceability metadata and active-only search**
 
 ```md
-<!-- tests/fixtures/source-doc.md -->
----
+## <!-- tests/fixtures/source-doc.md -->
+
 title: Imported Source Doc
 tags:
-  - imported
-doc_type: guide
+
+- imported
+  doc_type: guide
+
 ---
 
 # Imported Source Doc
@@ -1132,10 +1125,10 @@ test("importDoc preserves source traceability metadata and searchDocs excludes i
     const config = resolveConfig({
       MARKDOWN_STORE_REPO: repoRoot,
     });
-    const service = new DocumentService(
-      new CanonicalDocStore(config),
-      { reindex: async () => undefined, search: async () => [] },
-    );
+    const service = new DocumentService(new CanonicalDocStore(config), {
+      reindex: async () => undefined,
+      search: async () => [],
+    });
 
     const imported = await service.importDoc(
       {
@@ -1144,7 +1137,7 @@ test("importDoc preserves source traceability metadata and searchDocs excludes i
         source_ref: "refs/heads/main",
         source_commit: "abc123",
       },
-      "2026-04-14T18:20:00.000Z",
+      "2026-04-14T18:20:00.000Z"
     );
 
     assert.equal(imported.metadata.source, "imported");
@@ -1320,7 +1313,8 @@ export function registerImportDocTool(server: McpServer, service: DocumentServic
     "import_doc",
     {
       title: "Import Document",
-      description: "Import an existing markdown file into the canonical repository without deleting the source",
+      description:
+        "Import an existing markdown file into the canonical repository without deleting the source",
       inputSchema: importDocSchema,
     },
     async (input) => {
@@ -1337,12 +1331,12 @@ export function registerImportDocTool(server: McpServer, service: DocumentServic
                 warnings: [],
               },
               null,
-              2,
+              2
             ),
           },
         ],
       };
-    },
+    }
   );
 }
 ```
@@ -1383,12 +1377,12 @@ export function registerSearchDocsTool(server: McpServer, service: DocumentServi
                 tags: document.metadata.tags,
               })),
               null,
-              2,
+              2
             ),
           },
         ],
       };
-    },
+    }
   );
 }
 ```
@@ -1417,6 +1411,7 @@ git commit -m "feat: add import and search tools"
 ## Task 6: Complete The Lifecycle Tools
 
 **Files:**
+
 - Create: `tests/lifecycle.test.ts`
 - Create: `src/tools/update-doc.ts`
 - Create: `src/tools/deactivate-doc.ts`
@@ -1446,10 +1441,10 @@ test("update, deactivate, reactivate, and delete obey canonical lifecycle rules"
     const config = resolveConfig({
       MARKDOWN_STORE_REPO: repoRoot,
     });
-    const service = new DocumentService(
-      new CanonicalDocStore(config),
-      { reindex: async () => undefined, search: async () => [] },
-    );
+    const service = new DocumentService(new CanonicalDocStore(config), {
+      reindex: async () => undefined,
+      search: async () => [],
+    });
 
     await service.createDoc(
       {
@@ -1458,7 +1453,7 @@ test("update, deactivate, reactivate, and delete obey canonical lifecycle rules"
         tags: ["lifecycle"],
         content: "# Lifecycle Doc",
       },
-      "2026-04-14T18:30:00.000Z",
+      "2026-04-14T18:30:00.000Z"
     );
 
     const updated = await service.updateDoc("lifecycle-doc", {
@@ -1604,7 +1599,7 @@ export function registerUpdateDocTool(server: McpServer, service: DocumentServic
       return {
         content: [{ type: "text" as const, text: JSON.stringify(updated, null, 2) }],
       };
-    },
+    }
   );
 }
 ```
@@ -1633,7 +1628,7 @@ export function registerDeactivateDocTool(server: McpServer, service: DocumentSe
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
-    },
+    }
   );
 }
 ```
@@ -1662,7 +1657,7 @@ export function registerReactivateDocTool(server: McpServer, service: DocumentSe
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
-    },
+    }
   );
 }
 ```
@@ -1691,7 +1686,7 @@ export function registerDeleteDocTool(server: McpServer, service: DocumentServic
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
       };
-    },
+    }
   );
 }
 ```
