@@ -10,7 +10,7 @@
     "build": "tsc",
     "prettier:format": "prettier --write .",
     "prettier:check": "prettier --check .",
-    "test": "node --import tsx --test tests",
+    "test": "node --test --test-isolation=none --experimental-strip-types \"tests/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -22,7 +22,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
+    "@types/node": "^24.12.2",
     "prettier": "^3.8.2",
     "tsx": "^4.20.5",
     "typescript": "^6.0.2"
