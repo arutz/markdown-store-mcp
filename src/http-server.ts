@@ -51,7 +51,12 @@ export async function startHttpServer(
     }
   });
 
-  await listen(nodeServer, runtime);
+  try {
+    await listen(nodeServer, runtime);
+  } catch (error) {
+    await cleanupFailedStartup(server, httpTransport, nodeServer);
+    throw error;
+  }
 
   const port = resolveListeningPort(nodeServer, runtime.port);
   logger.info("server_start", {
@@ -137,7 +142,7 @@ function toHeaders(req: IncomingMessage): Headers {
   return headers;
 }
 
-async function writeNodeResponse(
+export async function writeNodeResponse(
   res: import("node:http").ServerResponse,
   response: Response
 ): Promise<void> {
@@ -153,9 +158,50 @@ async function writeNodeResponse(
 
   await new Promise<void>((resolve, reject) => {
     const readable = Readable.fromWeb(response.body as never);
-    readable.on("error", reject);
-    res.on("error", reject);
-    readable.pipe(res).on("finish", () => resolve());
+    let settled = false;
+
+    const cleanup = () => {
+      readable.off("error", handleError);
+      res.off("error", handleError);
+      res.off("finish", settleWithResolve);
+      res.off("close", handleClose);
+    };
+    const settleWithResolve = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const settleWithReject = (error: Error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const handleClose = () => {
+      if (settled) {
+        return;
+      }
+
+      readable.destroy();
+      settleWithResolve();
+    };
+    const handleError = (error: Error) => {
+      readable.destroy();
+      settleWithReject(error);
+    };
+
+    readable.on("error", handleError);
+    res.on("error", handleError);
+    res.on("finish", settleWithResolve);
+    res.on("close", handleClose);
+    readable.pipe(res);
   });
 }
 
@@ -193,4 +239,18 @@ async function closeNodeServer(server: NodeHttpServer): Promise<void> {
       resolve();
     });
   });
+}
+
+async function cleanupFailedStartup(
+  server: Pick<McpServer, "close">,
+  transport: {
+    close: () => Promise<void>;
+  },
+  nodeServer: NodeHttpServer
+): Promise<void> {
+  await Promise.allSettled([
+    server.close(),
+    transport.close(),
+    nodeServer.listening ? closeNodeServer(nodeServer) : Promise.resolve(),
+  ]);
 }
