@@ -53,6 +53,28 @@ test("structured logger writes newline-delimited JSON with common fields", () =>
   assert.equal(typeof parsed.ts, "string");
 });
 
+test("structured logger preserves required metadata when payload collides", () => {
+  const writes: string[] = [];
+  const logger = createStructuredLogger({
+    write: (chunk: string) => {
+      writes.push(chunk);
+    },
+  });
+
+  logger.info("server_start", {
+    level: "debug",
+    event: "payload_event",
+    ts: "payload-ts",
+    transport: "http",
+  });
+
+  const parsed = JSON.parse(writes[0] ?? "");
+  assert.equal(parsed.level, "info");
+  assert.equal(parsed.event, "server_start");
+  assert.notEqual(parsed.ts, "payload-ts");
+  assert.equal(parsed.transport, "http");
+});
+
 test("structured logger supports debug info and error levels", () => {
   const writes: string[] = [];
   const logger = createStructuredLogger({
@@ -91,5 +113,32 @@ test("structured logger falls back safely if payload serialization throws", () =
   const parsed = JSON.parse(writes[0] ?? "");
   assert.equal(parsed.level, "error");
   assert.equal(parsed.event, "log_fallback");
+  assert.ok(String(parsed.error).length <= 250);
   assert.match(String(parsed.error), /serialize/i);
+});
+
+test("structured logger truncates fallback errors", () => {
+  const writes: string[] = [];
+  const logger = createStructuredLogger({
+    write: (chunk: string) => {
+      writes.push(chunk);
+    },
+  });
+
+  const problematic = {
+    toJSON() {
+      throw new Error("x".repeat(400));
+    },
+  };
+
+  logger.info("server_start", {
+    transport: "http",
+    payload: problematic,
+  });
+
+  const parsed = JSON.parse(writes[0] ?? "");
+  assert.equal(parsed.level, "error");
+  assert.equal(parsed.event, "log_fallback");
+  assert.ok(String(parsed.error).length <= 250);
+  assert.match(String(parsed.error), /<truncated>$/);
 });

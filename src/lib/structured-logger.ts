@@ -42,10 +42,10 @@ function writeStructuredLog(
   try {
     sink.write(
       `${JSON.stringify({
+        ...truncateTopLevelValues(payload),
         ts: new Date().toISOString(),
         level,
         event,
-        ...truncateTopLevelValues(payload),
       })}\n`
     );
   } catch (error) {
@@ -54,7 +54,7 @@ function writeStructuredLog(
         ts: new Date().toISOString(),
         level: "error",
         event: "log_fallback",
-        error: describeLogError(error),
+        ...truncateTopLevelValues({ error: describeLogError(error) }),
       })}\n`
     );
   }
