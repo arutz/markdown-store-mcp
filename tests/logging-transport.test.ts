@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
+import { StdioServerTransport } from "@modelcontextprotocol/server";
+
+import { startStdioRuntime } from "../src/index.ts";
 import { createLoggingTransport } from "../src/lib/logging-transport.ts";
 import { createStructuredLogger } from "../src/lib/structured-logger.ts";
 import { wrapToolHandler } from "../src/lib/tool-logging.ts";
@@ -79,4 +83,32 @@ test("wrapToolHandler emits info logs with truncated arguments", async () => {
   assert.match(String(parsed[0]?.args?.content), /<truncated>$/);
   assert.equal(parsed[1]?.event, "tool_call");
   assert.equal(parsed[1]?.outcome, "completed");
+});
+
+test("stdio startup wires structured logger into tool and protocol wrappers", async () => {
+  const writes: string[] = [];
+  const stdout = new PassThrough();
+  stdout.setEncoding("utf8");
+  stdout.on("data", (chunk: string) => {
+    writes.push(chunk);
+  });
+
+  const server = {
+    connectCalls: [] as unknown[],
+    async connect(transport: unknown) {
+      this.connectCalls.push(transport);
+    },
+  };
+
+  await startStdioRuntime(server as never, {
+    stdout,
+  });
+
+  assert.equal(server.connectCalls.length, 1);
+  assert.equal(server.connectCalls[0] instanceof StdioServerTransport, false);
+  assert.equal(typeof (server.connectCalls[0] as { send?: unknown }).send, "function");
+
+  const parsed = writes.map((line) => JSON.parse(line));
+  assert.equal(parsed[0]?.event, "server_start");
+  assert.equal(parsed[0]?.transport, "stdio");
 });
