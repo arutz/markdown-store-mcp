@@ -91,6 +91,27 @@ test("structured logger supports debug info and error levels", () => {
   assert.deepEqual(levels, ["debug", "info", "error"]);
 });
 
+test("structured logger preserves error payload context", () => {
+  const writes: string[] = [];
+  const logger = createStructuredLogger({
+    write: (chunk: string) => {
+      writes.push(chunk);
+    },
+  });
+
+  logger.error("startup_failure", {
+    error: new Error("boom"),
+  });
+
+  const parsed = JSON.parse(writes[0] ?? "");
+  assert.equal(parsed.level, "error");
+  assert.equal(parsed.event, "startup_failure");
+  assert.match(String(parsed.error), /Error/);
+  assert.match(String(parsed.error), /boom/);
+  assert.match(String(parsed.error), /Error: boom/);
+  assert.match(String(parsed.error), /at TestContext/);
+});
+
 test("structured logger falls back safely if payload serialization throws", () => {
   const writes: string[] = [];
   const logger = createStructuredLogger({
@@ -115,6 +136,22 @@ test("structured logger falls back safely if payload serialization throws", () =
   assert.equal(parsed.event, "log_fallback");
   assert.ok(String(parsed.error).length <= 250);
   assert.match(String(parsed.error), /serialize/i);
+});
+
+test("structured logger swallows sink write failures during fallback", () => {
+  let attempts = 0;
+  const logger = createStructuredLogger({
+    write: () => {
+      attempts += 1;
+      throw new Error("sink write failed");
+    },
+  });
+
+  assert.doesNotThrow(() => {
+    logger.debug("mcp_message", { transport: "stdio" });
+  });
+
+  assert.equal(attempts, 2);
 });
 
 test("structured logger truncates fallback errors", () => {

@@ -49,7 +49,8 @@ function writeStructuredLog(
       })}\n`
     );
   } catch (error) {
-    sink.write(
+    safeWrite(
+      sink,
       `${JSON.stringify({
         ts: new Date().toISOString(),
         level: "error",
@@ -63,6 +64,10 @@ function writeStructuredLog(
 function truncateTopLevelValue(value: unknown): unknown {
   if (typeof value === "string") {
     return truncateString(value);
+  }
+
+  if (value instanceof Error) {
+    return truncateString(formatError(value));
   }
 
   if (
@@ -86,6 +91,14 @@ function truncateTopLevelValue(value: unknown): unknown {
   return truncateString(serialized);
 }
 
+function safeWrite(sink: StructuredLogSink, line: string): void {
+  try {
+    sink.write(line);
+  } catch {
+    // Logging must never throw if the sink is unavailable or broken.
+  }
+}
+
 function truncateString(value: string): string {
   if (value.length <= MAX_FIELD_LENGTH) {
     return value;
@@ -100,4 +113,10 @@ function describeLogError(error: unknown): string {
   }
 
   return "Failed to serialize log event";
+}
+
+function formatError(error: Error): string {
+  return [error.name, error.message, error.stack]
+    .filter((part) => typeof part === "string" && part.length > 0)
+    .join("\n");
 }
