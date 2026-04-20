@@ -1,0 +1,196 @@
+import { createServer, type IncomingMessage, type Server as NodeHttpServer } from "node:http";
+import { Readable } from "node:stream";
+
+import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
+
+import { createLoggingTransport } from "./lib/logging-transport.ts";
+import type { StructuredLogger } from "./lib/structured-logger.ts";
+import type { RuntimeConfig } from "./runtime-config.ts";
+
+export interface StartedHttpServer {
+  close: () => Promise<void>;
+  port: number;
+  server: NodeHttpServer;
+}
+
+export async function startHttpServer(
+  server: McpServer,
+  runtime: RuntimeConfig,
+  logger: StructuredLogger
+): Promise<StartedHttpServer> {
+  const rawHttpTransport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID(),
+  });
+  const httpTransport = createLoggingTransport(rawHttpTransport, logger, "http");
+
+  await server.connect(httpTransport);
+
+  const nodeServer = createServer(async (req, res) => {
+    try {
+      if (!matchesEndpoint(req, runtime)) {
+        res.statusCode = 404;
+        res.end("Not Found");
+        return;
+      }
+
+      const request = await toWebRequest(req, runtime);
+      const response = await rawHttpTransport.handleRequest(request);
+      await writeNodeResponse(res, response);
+    } catch (error) {
+      logger.error("transport_error", {
+        transport: "http",
+        phase: "request_handler",
+        error,
+      });
+
+      if (!res.headersSent) {
+        res.statusCode = 500;
+      }
+
+      res.end();
+    }
+  });
+
+  await listen(nodeServer, runtime);
+
+  const port = resolveListeningPort(nodeServer, runtime.port);
+  logger.info("server_start", {
+    transport: "http",
+    host: runtime.host,
+    port,
+    endpoint: `http://${runtime.host}:${port}${runtime.endpointPath}`,
+  });
+
+  return {
+    server: nodeServer,
+    port,
+    close: async () => {
+      await server.close();
+      await closeNodeServer(nodeServer);
+      logger.info("server_stop", {
+        transport: "http",
+        reason: "close_called",
+      });
+    },
+  };
+}
+
+function matchesEndpoint(req: IncomingMessage, runtime: RuntimeConfig): boolean {
+  const localPort = req.socket.localPort ?? runtime.port ?? 80;
+  const requestPath = new URL(
+    req.url ?? runtime.endpointPath,
+    `http://${runtime.host}:${localPort}`
+  ).pathname;
+
+  return requestPath === runtime.endpointPath;
+}
+
+async function toWebRequest(req: IncomingMessage, runtime: RuntimeConfig): Promise<Request> {
+  const localPort = req.socket.localPort ?? runtime.port;
+  const body = shouldReadBody(req.method) ? await readIncomingMessage(req) : undefined;
+  const requestBody = body ? new Uint8Array(body) : undefined;
+  const requestInit: RequestInit & {
+    duplex?: "half";
+  } = {
+    method: req.method,
+    headers: toHeaders(req),
+    body: requestBody,
+    duplex: requestBody ? "half" : undefined,
+  };
+
+  return new Request(
+    `http://${runtime.host}:${localPort}${req.url ?? runtime.endpointPath}`,
+    requestInit
+  );
+}
+
+function shouldReadBody(method: string | undefined): boolean {
+  return method !== "GET" && method !== "HEAD" && method !== "DELETE";
+}
+
+async function readIncomingMessage(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+function toHeaders(req: IncomingMessage): Headers {
+  const headers = new Headers();
+
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        headers.append(key, entry);
+      }
+      continue;
+    }
+
+    if (typeof value === "string") {
+      headers.set(key, value);
+    }
+  }
+
+  return headers;
+}
+
+async function writeNodeResponse(
+  res: import("node:http").ServerResponse,
+  response: Response
+): Promise<void> {
+  res.statusCode = response.status;
+  response.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
+
+  if (!response.body) {
+    res.end();
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const readable = Readable.fromWeb(response.body as never);
+    readable.on("error", reject);
+    res.on("error", reject);
+    readable.pipe(res).on("finish", () => resolve());
+  });
+}
+
+async function listen(server: NodeHttpServer, runtime: RuntimeConfig): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(runtime.port, runtime.host);
+  });
+}
+
+function resolveListeningPort(server: NodeHttpServer, fallbackPort: number): number {
+  const address = server.address();
+
+  return typeof address === "object" && address !== null ? address.port : fallbackPort;
+}
+
+async function closeNodeServer(server: NodeHttpServer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}

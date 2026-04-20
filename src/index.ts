@@ -3,10 +3,12 @@ import { process } from "@modelcontextprotocol/server/_shims";
 import { fileURLToPath } from "node:url";
 
 import { resolveConfig } from "./config.ts";
+import { startHttpServer } from "./http-server.ts";
 import { MarkdownDbIndexer } from "./lib/indexer.ts";
 import { createLoggingTransport } from "./lib/logging-transport.ts";
 import { createStructuredLogger } from "./lib/structured-logger.ts";
 import { CanonicalDocStore } from "./repository/canonical-doc-store.ts";
+import { resolveRuntimeConfig } from "./runtime-config.ts";
 import { buildServer } from "./server.ts";
 import { DocumentService } from "./services/document-service.ts";
 
@@ -34,17 +36,27 @@ export async function startStdioRuntime(
 }
 
 export async function main() {
+  const runtime = resolveRuntimeConfig();
   const config = resolveConfig();
   const service = new DocumentService(new CanonicalDocStore(config), new MarkdownDbIndexer(config));
   const logger = createRuntimeLogger();
-  const server = buildServer(service, logger, "stdio");
+  const server = buildServer(service, logger, runtime.transport);
+
+  if (runtime.transport === "http") {
+    await startHttpServer(server, runtime, logger);
+    return;
+  }
 
   await startStdioRuntime(server);
 }
 
 if (isMainModule(import.meta.url)) {
   main().catch((error) => {
-    console.error("Fatal error in main():", error);
+    const logger = createRuntimeLogger();
+    logger.error("startup_failure", {
+      transport: "unknown",
+      error,
+    });
     process.exit(1);
   });
 }
