@@ -41,8 +41,19 @@ export function createLoggingTransport(
       await inner.start();
     },
     async send(message: JSONRPCMessage, options?: TransportSendOptions) {
+      try {
+        await inner.send(message, options);
+      } catch (error) {
+        logger.error("transport_error", {
+          transport: transportName,
+          phase: "outbound",
+          request_id: describeRequestId(message),
+          error,
+        });
+        throw error;
+      }
+
       logger.debug("mcp_message", describeMessage("outbound", transportName, message));
-      return inner.send(message, options);
     },
     async close() {
       await inner.close();
@@ -84,4 +95,12 @@ function describePayload(payload: unknown): unknown {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describeRequestId(message: JSONRPCMessage): string | number | null {
+  const record = message as {
+    id?: string | number;
+  };
+
+  return record.id ?? null;
 }
