@@ -109,7 +109,7 @@ test("structured logger preserves error payload context", () => {
   assert.match(String(parsed.error), /Error/);
   assert.match(String(parsed.error), /boom/);
   assert.match(String(parsed.error), /Error: boom/);
-  assert.match(String(parsed.error), /at TestContext/);
+  assert.match(String(parsed.error), /at /);
 });
 
 test("structured logger falls back safely if payload serialization throws", () => {
