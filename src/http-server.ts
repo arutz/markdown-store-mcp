@@ -70,8 +70,19 @@ export async function startHttpServer(
     server: nodeServer,
     port,
     close: async () => {
-      await server.close();
-      await closeNodeServer(nodeServer);
+      const [serverCloseResult, listenerCloseResult] = await Promise.allSettled([
+        server.close(),
+        nodeServer.listening ? closeNodeServer(nodeServer) : Promise.resolve(),
+      ]);
+
+      if (serverCloseResult.status === "rejected") {
+        throw serverCloseResult.reason;
+      }
+
+      if (listenerCloseResult.status === "rejected") {
+        throw listenerCloseResult.reason;
+      }
+
       logger.info("server_stop", {
         transport: "http",
         reason: "close_called",

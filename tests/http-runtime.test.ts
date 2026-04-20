@@ -229,6 +229,53 @@ test("writeNodeResponse settles and tears down the readable when the client disc
   }
 });
 
+test("HTTP runtime always closes the listener even when MCP shutdown fails", async () => {
+  const logger = createStructuredLogger({
+    write: () => {},
+  });
+  const fakeServer = {
+    async connect() {},
+    async close() {
+      throw new Error("shutdown failed");
+    },
+  };
+  const runtime = await startHttpServer(
+    fakeServer as never,
+    {
+      transport: "http",
+      host: "127.0.0.1",
+      port: 0,
+      endpointPath: "/mcp",
+    },
+    logger
+  );
+
+  await assert.rejects(runtime.close(), /shutdown failed/);
+
+  const reboundServer = createServer((_, res) => {
+    res.statusCode = 204;
+    res.end();
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      reboundServer.once("error", reject);
+      reboundServer.listen(runtime.port, "127.0.0.1", () => resolve());
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      reboundServer.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+});
+
 async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
   const startedAt = Date.now();
 
