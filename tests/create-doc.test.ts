@@ -19,6 +19,7 @@ test("createDoc writes the document and triggers a reindex", async () => {
       reindex: async () => {
         reindexCalls.push("reindex");
       },
+      search: async () => [],
     });
 
     const created = await service.createDoc(
@@ -53,6 +54,7 @@ test("createDoc rolls back the document when reindexing fails", async () => {
       reindex: async () => {
         throw new Error("reindex failed");
       },
+      search: async () => [],
     });
 
     await assert.rejects(
@@ -107,6 +109,7 @@ test("registerCreateDocTool returns an error payload when createDoc fails", asyn
       reindex: async () => {
         throw new Error("sqlite binding missing");
       },
+      search: async () => [],
     });
 
     const registeredTools: Record<string, RegisteredTool | undefined> = {};

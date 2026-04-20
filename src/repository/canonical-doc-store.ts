@@ -84,6 +84,19 @@ export class CanonicalDocStore {
     }
   }
 
+  async requireByIdentifier(identifier: string): Promise<StoredCanonicalDocument> {
+    const document =
+      identifier.includes("/") || identifier.endsWith(".md")
+        ? await this.getByPath(identifier)
+        : await this.getById(identifier);
+
+    if (!document) {
+      throw new Error(`Document "${identifier}" was not found`);
+    }
+
+    return document;
+  }
+
   private async *listMarkdownFiles(directory: string): AsyncGenerator<string> {
     let entries;
     try {

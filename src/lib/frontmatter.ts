@@ -10,7 +10,7 @@ export interface ParsedFrontmatter<
 }
 
 export function serializeFrontmatter(metadata: Record<string, unknown>, content: string): string {
-  return matter.stringify(content, metadata);
+  return matter.stringify(content, withoutUndefinedValues(metadata));
 }
 
 export function parseFrontmatter(source: string, canonicalPath: string): CanonicalDocument {
@@ -21,4 +21,8 @@ export function parseFrontmatter(source: string, canonicalPath: string): Canonic
     metadata: docMetadataSchema.parse(parsed.data),
     content: parsed.content.trimEnd(),
   };
+}
+
+function withoutUndefinedValues(metadata: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined));
 }

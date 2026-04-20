@@ -37,6 +37,7 @@ test("getDoc returns an active document by id and canonical path", async () => {
     });
     const service = new DocumentService(new CanonicalDocStore(config), {
       reindex: async () => undefined,
+      search: async () => [],
     });
 
     await service.createDoc(
@@ -68,6 +69,7 @@ test("getDoc hides inactive documents unless explicitly requested", async () => 
     });
     const service = new DocumentService(new CanonicalDocStore(config), {
       reindex: async () => undefined,
+      search: async () => [],
     });
 
     await service.createDoc(
@@ -98,6 +100,7 @@ test("registerGetDocTool registers get_doc and returns document payload", async 
     });
     const service = new DocumentService(new CanonicalDocStore(config), {
       reindex: async () => undefined,
+      search: async () => [],
     });
 
     await service.createDoc(
