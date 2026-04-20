@@ -35,6 +35,14 @@ test("resolveRuntimeConfig rejects invalid port values", () => {
   assert.throws(() => resolveRuntimeConfig(["--port", "abc"], {}), /port/i);
 });
 
+test("resolveRuntimeConfig rejects port strings with trailing characters", () => {
+  assert.throws(() => resolveRuntimeConfig(["--port", "3000abc"], {}), /port/i);
+});
+
+test("resolveRuntimeConfig rejects ports above the TCP range", () => {
+  assert.throws(() => resolveRuntimeConfig(["--port", "65536"], {}), /port/i);
+});
+
 test("resolveRuntimeConfig rejects non-localhost HTTP binding", () => {
   assert.throws(() => resolveRuntimeConfig(["--host", "0.0.0.0"], {}), /127\.0\.0\.1/i);
 });
