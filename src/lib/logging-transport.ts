@@ -38,7 +38,16 @@ export function createLoggingTransport(
         wrapped.onmessage?.(message, extra);
       };
 
-      await inner.start();
+      try {
+        await inner.start();
+      } catch (error) {
+        logger.error("transport_error", {
+          transport: transportName,
+          phase: "startup",
+          error,
+        });
+        throw error;
+      }
     },
     async send(message: JSONRPCMessage, options?: TransportSendOptions) {
       try {

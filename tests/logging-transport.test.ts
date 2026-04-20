@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 
-import { McpServer, StdioServerTransport } from "@modelcontextprotocol/server";
+import type { JSONRPCMessage, Transport } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server";
 
 import { buildServer } from "../src/server.ts";
 import { startStdioRuntime } from "../src/index.ts";
@@ -52,6 +53,40 @@ test("logging transport emits debug events for inbound and outbound MCP messages
   assert.equal(parsed[1]?.event, "mcp_message");
   assert.equal(parsed[1]?.direction, "outbound");
   assert.equal(parsed[1]?.request_id, "1");
+});
+
+test("logging transport records startup failures distinctly", async () => {
+  const writes: string[] = [];
+  const logger = createStructuredLogger({
+    write: (chunk: string) => {
+      writes.push(chunk);
+    },
+  });
+  const startError = new Error("start failed");
+
+  const innerTransport = {
+    onclose: undefined as (() => void) | undefined,
+    onerror: undefined as ((error: Error) => void) | undefined,
+    onmessage: undefined as ((message: unknown) => void) | undefined,
+    async start() {
+      throw startError;
+    },
+    async send(message: unknown) {
+      void message;
+    },
+    async close() {},
+  };
+
+  const wrapped = createLoggingTransport(innerTransport as never, logger, "stdio");
+
+  await assert.rejects(wrapped.start(), startError);
+
+  const parsed = writes.map((line) => JSON.parse(line));
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0]?.event, "transport_error");
+  assert.equal(parsed[0]?.transport, "stdio");
+  assert.equal(parsed[0]?.phase, "startup");
+  assert.match(String(parsed[0]?.error), /start failed/);
 });
 
 test("logging transport records failed outbound sends distinctly", async () => {
@@ -127,14 +162,41 @@ test("wrapToolHandler emits info logs with truncated arguments", async () => {
   assert.equal(parsed[1]?.outcome, "completed");
 });
 
-test("stdio startup wiring can emit real tool_call logs through registered tools", async () => {
+test("stdio startup wiring uses a wrapped transport and logs server start", async () => {
   const writes: string[] = [];
   const stdout = new PassThrough();
   stdout.setEncoding("utf8");
   stdout.on("data", (chunk: string) => {
     writes.push(chunk);
   });
-  const toolService = {
+  const server = {
+    connectCalls: [] as unknown[],
+    async connect(transport: unknown) {
+      this.connectCalls.push(transport);
+    },
+  };
+
+  await startStdioRuntime(server as never, {
+    stdout,
+  });
+
+  assert.equal(server.connectCalls.length, 1);
+  assert.equal(server.connectCalls[0] instanceof StdioServerTransport, false);
+  assert.equal(typeof (server.connectCalls[0] as { send?: unknown }).send, "function");
+
+  const parsed = writes.map((line) => JSON.parse(line));
+  assert.equal(parsed[0]?.event, "server_start");
+  assert.equal(parsed[0]?.transport, "stdio");
+});
+
+test("buildServer emits tool_call logs when invoked through public MCP transport behavior", async () => {
+  const writes: string[] = [];
+  const logger = createStructuredLogger({
+    write: (chunk: string) => {
+      writes.push(chunk);
+    },
+  });
+  const service = {
     async createDoc(input: {
       id?: string;
       title: string;
@@ -155,48 +217,79 @@ test("stdio startup wiring can emit real tool_call logs through registered tools
         },
       };
     },
-  };
-  const builtServer = buildServer(
-    toolService as never,
-    createStructuredLogger({ write: stdout.write.bind(stdout) }),
-    "stdio"
-  ) as McpServer & {
-    _registeredTools: Record<
-      string,
-      {
-        handler: (args: Record<string, unknown>, ctx: unknown) => Promise<unknown>;
-      }
-    >;
-  };
-
-  const server = {
-    connectCalls: [] as unknown[],
-    async connect(transport: unknown) {
-      this.connectCalls.push(transport);
+    async getDoc() {
+      return null;
+    },
+    async importDoc() {
+      throw new Error("not implemented");
+    },
+    async searchDocs() {
+      return [];
+    },
+    async updateDoc() {
+      throw new Error("not implemented");
+    },
+    async deactivateDoc() {
+      throw new Error("not implemented");
+    },
+    async reactivateDoc() {
+      throw new Error("not implemented");
+    },
+    async deleteDoc() {
+      throw new Error("not implemented");
     },
   };
-
-  await startStdioRuntime(server as never, {
-    stdout,
+  const sentMessages: JSONRPCMessage[] = [];
+  const transport = createTestTransport((message) => {
+    sentMessages.push(message);
   });
+  const server = buildServer(service as never, logger, "stdio");
 
-  assert.equal(server.connectCalls.length, 1);
-  assert.equal(server.connectCalls[0] instanceof StdioServerTransport, false);
-  assert.equal(typeof (server.connectCalls[0] as { send?: unknown }).send, "function");
+  await server.connect(transport);
 
-  await builtServer._registeredTools.create_doc.handler(
-    {
-      title: "Doc",
-      tags: [],
-      doc_type: "note",
-      content: "z".repeat(400),
+  transport.onmessage?.({
+    jsonrpc: "2.0",
+    id: "init-1",
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-11-05",
+      capabilities: {},
+      clientInfo: {
+        name: "test-client",
+        version: "1.0.0",
+      },
     },
-    {}
+  } as never);
+  await flushAsyncWork();
+
+  transport.onmessage?.({
+    jsonrpc: "2.0",
+    method: "notifications/initialized",
+  } as never);
+  await flushAsyncWork();
+
+  transport.onmessage?.({
+    jsonrpc: "2.0",
+    id: "call-1",
+    method: "tools/call",
+    params: {
+      name: "create_doc",
+      arguments: {
+        title: "Doc",
+        tags: [],
+        doc_type: "note",
+        content: "z".repeat(400),
+      },
+    },
+  } as never);
+  await flushAsyncWork();
+
+  assert.equal(
+    sentMessages.some((message) => "id" in message && message.id === "call-1"),
+    true
   );
 
   const parsed = writes.map((line) => JSON.parse(line));
-  assert.equal(parsed[0]?.event, "server_start");
-  assert.equal(parsed[0]?.transport, "stdio");
   assert.equal(
     parsed.some((entry) => entry.event === "tool_call" && entry.outcome === "started"),
     true
@@ -215,3 +308,20 @@ test("stdio startup wiring can emit real tool_call logs through registered tools
     true
   );
 });
+
+function createTestTransport(onSend: (message: JSONRPCMessage) => void): Transport {
+  return {
+    onclose: undefined,
+    onerror: undefined,
+    onmessage: undefined,
+    async start() {},
+    async send(message: JSONRPCMessage) {
+      onSend(message);
+    },
+    async close() {},
+  };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
