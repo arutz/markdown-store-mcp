@@ -12,8 +12,8 @@
     "prettier:check": "prettier --check .",
     "test": "node --test --test-isolation=none --experimental-strip-types \"tests/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "dev": "SET MARKDOWN_STORE_REPO=\"C:\\Users\\achim\\IdeaProjects\\markdown-store-mcp\\docs\\archive\" && tsx watch src/index.ts",
-    "dev:http": "SET MARKDOWN_STORE_REPO=\"C:\\Users\\achim\\IdeaProjects\\markdown-store-mcp\\docs\\archive\" && tsx watch src/index.ts --transport=http",
+    "dev": "SET MARKDOWN_STORE_REPO=docs\\archive && tsx watch src/index.ts",
+    "dev:http": "SET MARKDOWN_STORE_REPO=docs\\archive && tsx watch src/index.ts --transport=http",
     "start": "node build/index.js",
     "start:http": "node build/index.js --transport=http"
   },

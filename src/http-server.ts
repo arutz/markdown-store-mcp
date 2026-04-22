@@ -24,7 +24,9 @@ export async function startHttpServer(
   logger: StructuredLogger
 ): Promise<StartedHttpServer> {
   const rawHttpTransport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
+    // Treat each HTTP request independently so fresh MCP clients can initialize
+    // without inheriting sticky in-memory session state from previous clients.
+    sessionIdGenerator: undefined,
   });
   const httpTransport = createLoggingTransport(rawHttpTransport, logger, "http");
 

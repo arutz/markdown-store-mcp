@@ -14,7 +14,7 @@ import { buildServer } from "../src/server.ts";
 import { DocumentService } from "../src/services/document-service.ts";
 import { makeTempRepo } from "./helpers/temp-repo.ts";
 
-test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
+test("HTTP runtime binds to localhost and serves MCP on /mcp without session headers", async () => {
   const tempRepo = await makeTempRepo();
   const writes: string[] = [];
   let runtime:
@@ -24,6 +24,7 @@ test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
       }
     | undefined;
   let initializeResponse: Response | undefined;
+  let initializeResponseBody = "";
 
   try {
     const logger = createStructuredLogger({
@@ -72,8 +73,11 @@ test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
       }),
     });
 
+    initializeResponseBody = await initializeResponse.text();
+
     assert.equal(initializeResponse.status, 200);
-    assert.ok(initializeResponse.headers.get("mcp-session-id"));
+    assert.equal(initializeResponse.headers.get("mcp-session-id"), null);
+    assert.match(initializeResponseBody, /"protocolVersion":"2025-11-25"/);
     assert.equal(
       writes.some((line) => {
         const parsed = JSON.parse(line);
@@ -87,7 +91,6 @@ test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
       true
     );
   } finally {
-    await initializeResponse?.body?.cancel();
     await runtime?.close();
     assert.equal(
       writes.some((line) => {
@@ -96,6 +99,111 @@ test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
       }),
       true
     );
+    await tempRepo.removeTempRepo();
+  }
+});
+
+test("HTTP runtime allows independent initialize requests and follow-up tool listing", async () => {
+  const tempRepo = await makeTempRepo();
+  let runtime:
+    | {
+        close: () => Promise<void>;
+        port: number;
+      }
+    | undefined;
+
+  try {
+    const logger = createStructuredLogger({
+      write: () => {},
+    });
+    const config = resolveConfig({
+      MARKDOWN_STORE_REPO: tempRepo.repoRoot,
+    });
+    const service = new DocumentService(
+      new CanonicalDocStore(config),
+      new MarkdownDbIndexer(config)
+    );
+    const server = buildServer(service, logger, "http");
+
+    runtime = await startHttpServer(
+      server,
+      {
+        transport: "http",
+        host: "127.0.0.1",
+        port: 0,
+        endpointPath: "/mcp",
+      },
+      logger
+    );
+
+    const initializeBody = {
+      jsonrpc: "2.0",
+      id: "init-1",
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-05",
+        capabilities: {},
+        clientInfo: {
+          name: "test-client",
+          version: "1.0.0",
+        },
+      },
+    };
+
+    const firstInitialize = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(initializeBody),
+    });
+
+    const secondInitialize = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...initializeBody,
+        id: "init-2",
+        params: {
+          ...initializeBody.params,
+          clientInfo: {
+            name: "another-client",
+            version: "1.0.0",
+          },
+        },
+      }),
+    });
+
+    const toolsList = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": "2025-11-25",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "tools-1",
+        method: "tools/list",
+        params: {},
+      }),
+    });
+
+    assert.equal(firstInitialize.status, 200);
+    assert.equal(secondInitialize.status, 200);
+    assert.equal(toolsList.status, 200);
+    assert.equal(firstInitialize.headers.get("mcp-session-id"), null);
+    assert.equal(secondInitialize.headers.get("mcp-session-id"), null);
+
+    const toolsListBody = await toolsList.text();
+    assert.match(toolsListBody, /"name":"create_doc"/);
+    assert.match(toolsListBody, /"name":"search_docs"/);
+  } finally {
+    await runtime?.close();
     await tempRepo.removeTempRepo();
   }
 });
