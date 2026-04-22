@@ -100,6 +100,90 @@ test("HTTP runtime binds to localhost and serves MCP on /mcp", async () => {
   }
 });
 
+test("HTTP runtime answers browser CORS preflights and exposes MCP headers", async () => {
+  const tempRepo = await makeTempRepo();
+  let runtime:
+    | {
+        close: () => Promise<void>;
+        port: number;
+      }
+    | undefined;
+
+  try {
+    const logger = createStructuredLogger({
+      write: () => {},
+    });
+    const config = resolveConfig({
+      MARKDOWN_STORE_REPO: tempRepo.repoRoot,
+    });
+    const service = new DocumentService(
+      new CanonicalDocStore(config),
+      new MarkdownDbIndexer(config)
+    );
+    const server = buildServer(service, logger, "http");
+
+    runtime = await startHttpServer(
+      server,
+      {
+        transport: "http",
+        host: "127.0.0.1",
+        port: 0,
+        endpointPath: "/mcp",
+      },
+      logger
+    );
+
+    const preflightResponse = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://localhost:6274",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type,mcp-protocol-version",
+      },
+    });
+
+    assert.equal(preflightResponse.status, 204);
+    assert.equal(preflightResponse.headers.get("access-control-allow-origin"), "*");
+    assert.match(preflightResponse.headers.get("access-control-allow-methods") ?? "", /OPTIONS/);
+    assert.equal(
+      preflightResponse.headers.get("access-control-allow-headers"),
+      "content-type,mcp-protocol-version"
+    );
+
+    const initializeResponse = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:6274",
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "init-cors-1",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-05",
+          capabilities: {},
+          clientInfo: {
+            name: "inspector",
+            version: "1.0.0",
+          },
+        },
+      }),
+    });
+
+    assert.equal(initializeResponse.status, 200);
+    assert.equal(initializeResponse.headers.get("access-control-allow-origin"), "*");
+    assert.match(
+      initializeResponse.headers.get("access-control-expose-headers") ?? "",
+      /mcp-session-id/i
+    );
+  } finally {
+    await runtime?.close();
+    await tempRepo.removeTempRepo();
+  }
+});
+
 test("HTTP runtime cleans up the connected MCP server when listen fails", async () => {
   const blocker = createServer((_, res) => {
     res.statusCode = 204;

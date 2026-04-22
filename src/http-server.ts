@@ -13,6 +13,11 @@ export interface StartedHttpServer {
   server: NodeHttpServer;
 }
 
+const ACCESS_CONTROL_ALLOW_METHODS = "GET, POST, DELETE, OPTIONS";
+const ACCESS_CONTROL_EXPOSE_HEADERS = "mcp-session-id";
+const DEFAULT_ACCESS_CONTROL_ALLOW_HEADERS =
+  "accept, content-type, mcp-protocol-version, mcp-session-id, last-event-id";
+
 export async function startHttpServer(
   server: McpServer,
   runtime: RuntimeConfig,
@@ -30,6 +35,14 @@ export async function startHttpServer(
       if (!matchesEndpoint(req, runtime)) {
         res.statusCode = 404;
         res.end("Not Found");
+        return;
+      }
+
+      setCorsHeaders(res, req);
+
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.end();
         return;
       }
 
@@ -99,6 +112,16 @@ function matchesEndpoint(req: IncomingMessage, runtime: RuntimeConfig): boolean 
   ).pathname;
 
   return requestPath === runtime.endpointPath;
+}
+
+function setCorsHeaders(res: import("node:http").ServerResponse, req: IncomingMessage): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", ACCESS_CONTROL_ALLOW_METHODS);
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    req.headers["access-control-request-headers"] ?? DEFAULT_ACCESS_CONTROL_ALLOW_HEADERS
+  );
+  res.setHeader("Access-Control-Expose-Headers", ACCESS_CONTROL_EXPOSE_HEADERS);
 }
 
 async function toWebRequest(req: IncomingMessage, runtime: RuntimeConfig): Promise<Request> {
